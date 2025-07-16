@@ -3,13 +3,19 @@
 
 #include "framework.h"
 #include "Camo.h"
+#include <windows.h>
+#include <shellapi.h>
+#include <string>
 
 #define MAX_LOADSTRING 100
+#define ID_BUTTON_CONFIRM 1001
 
 // Global Variables:
 HINSTANCE hInst;                                // current instance
 WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
 WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
+HWND hButton = nullptr;                         // <-- Add this line
+HANDLE hScriptProcess = nullptr;                // Add this global variable to store the process handle
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -95,20 +101,47 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 //
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
-   hInst = hInstance; // Store instance handle in our global variable
+    hInst = hInstance; // Store instance handle in our global variable
 
-   HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
-      CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
+    HWND hWnd = CreateWindowW(
+        szWindowClass,
+        szTitle,
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, // Non-resizable
+        CW_USEDEFAULT, CW_USEDEFAULT, // x, y position
+        320, 180,                    // width, height
+        nullptr, nullptr, hInstance, nullptr);
 
-   if (!hWnd)
-   {
-      return FALSE;
-   }
+    if (!hWnd)
+    {
+        return FALSE;
+    }
 
-   ShowWindow(hWnd, nCmdShow);
-   UpdateWindow(hWnd);
+    // Get the client area size
+    RECT rcClient;
+    GetClientRect(hWnd, &rcClient);
 
-   return TRUE;
+    // Button size
+    const int buttonWidth = 100;
+    const int buttonHeight = 30;
+
+    // Calculate centered position
+    int x = (rcClient.right - rcClient.left - buttonWidth) / 2;
+    int y = (rcClient.bottom - rcClient.top - buttonHeight) / 2;
+
+    hButton = CreateWindowW(
+        L"BUTTON",
+        L"Press Me",
+        WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
+        x, y, buttonWidth, buttonHeight,
+        hWnd,
+        (HMENU)ID_BUTTON_CONFIRM,
+        hInstance,
+        nullptr);
+
+    ShowWindow(hWnd, nCmdShow);
+    UpdateWindow(hWnd);
+
+    return TRUE;
 }
 
 //
@@ -137,8 +170,81 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             case IDM_EXIT:
                 DestroyWindow(hWnd);
                 break;
+            case ID_BUTTON_CONFIRM:
+                {
+                    wchar_t currentText[32];
+                    GetWindowTextW(hButton, currentText, 32);
+
+                    if (wcscmp(currentText, L"Press Me") == 0)
+                    {
+                        // Build the command line for PowerShell
+                        std::wstring command = L"powershell.exe -ExecutionPolicy Bypass -File \"C:\\bin\\scripts\\test2.ps1\"";
+
+                        STARTUPINFOW si = { 0 };
+                        si.cb = sizeof(si);
+                        PROCESS_INFORMATION pi = { 0 };
+
+                        BOOL success = CreateProcessW(
+                            nullptr,
+                            &command[0],
+                            nullptr,
+                            nullptr,
+                            FALSE,
+                            CREATE_NO_WINDOW,
+                            nullptr,
+                            nullptr,
+                            &si,
+                            &pi
+                        );
+
+                        if (success) {
+                            hScriptProcess = pi.hProcess; // Save process handle for later termination
+                            CloseHandle(pi.hThread);
+                            SetWindowTextW(hButton, L"Stop");
+
+                            // Pin window to bottom right
+                            RECT rcWork;
+                            SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+
+                            int winWidth = 200;  // Your window width
+                            int winHeight = 150; // Your window height
+
+                            int x = rcWork.right - winWidth;
+                            int y = rcWork.bottom - winHeight;
+
+                            SetWindowPos(hWnd, nullptr, x, y, winWidth, winHeight, SWP_NOZORDER | SWP_NOACTIVATE);
+                        } else {
+                            MessageBoxW(hWnd, L"Failed to launch script.", L"Error", MB_OK | MB_ICONERROR);
+                        }
+                    }
+                    else if (wcscmp(currentText, L"Stop") == 0)
+                    {
+                        if (hScriptProcess)
+                        {
+                            TerminateProcess(hScriptProcess, 0);
+                            CloseHandle(hScriptProcess);
+                            hScriptProcess = nullptr;
+                        }
+                        SetWindowTextW(hButton, L"Press Me");
+                    }
+                }
+                break;
             default:
                 return DefWindowProc(hWnd, message, wParam, lParam);
+            }
+        }
+        break;
+    case WM_SIZE:
+        {
+            const int buttonWidth = 100;
+            const int buttonHeight = 30;
+            RECT rcClient;
+            GetClientRect(hWnd, &rcClient);
+            int x = (rcClient.right - rcClient.left - buttonWidth) / 2;
+            int y = (rcClient.bottom - rcClient.top - buttonHeight) / 2;
+            if (hButton)
+            {
+                MoveWindow(hButton, x, y, buttonWidth, buttonHeight, TRUE);
             }
         }
         break;
