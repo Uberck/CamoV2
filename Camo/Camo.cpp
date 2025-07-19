@@ -6,22 +6,48 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <string>
+#include <tlhelp32.h>
+#include <uxtheme.h>
+#pragma comment(lib, "uxtheme.lib")
 
-#define MAX_LOADSTRING 100
-#define ID_BUTTON_CONFIRM 1001
+#define WINDOW_WIDTH 320
+#define WINDOW_HEIGHT 180
+#define BUTTON_WIDTH 100
+#define BUTTON_HEIGHT 30
+#define IDM_TOGGLEDARK 4001
 
 // Global Variables:
-HINSTANCE hInst;                                // current instance
-WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
-WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
-HWND hButton = nullptr;                         // <-- Add this line
-HANDLE hScriptProcess = nullptr;                // Add this global variable to store the process handle
+HINSTANCE hInst = nullptr;
+WCHAR szTitle[MAX_LOADSTRING];
+WCHAR szWindowClass[MAX_LOADSTRING];
+HWND hButton = nullptr;
+HANDLE hScriptProcess = nullptr;
+HANDLE hNotepadProcess = nullptr;
 
-// Forward declarations of functions included in this code module:
-ATOM                MyRegisterClass(HINSTANCE hInstance);
-BOOL                InitInstance(HINSTANCE, int);
-LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
-INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
+bool g_isDarkMode = false;
+
+void TerminateAllNotepadInstances()
+{
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE)
+        return;
+
+    PROCESSENTRY32W pe;
+    pe.dwSize = sizeof(PROCESSENTRY32W);
+
+    if (Process32FirstW(hSnapshot, &pe)) {
+        do {
+            if (_wcsicmp(pe.szExeFile, L"notepad.exe") == 0) {
+                HANDLE hProc = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
+                if (hProc) {
+                    TerminateProcess(hProc, 0);
+                    CloseHandle(hProc);
+                }
+            }
+        } while (Process32NextW(hSnapshot, &pe));
+    }
+    CloseHandle(hSnapshot);
+}
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -108,7 +134,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
         szTitle,
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, // Non-resizable
         CW_USEDEFAULT, CW_USEDEFAULT, // x, y position
-        320, 180,                    // width, height
+        WINDOW_WIDTH, WINDOW_HEIGHT,                    // width, height
         nullptr, nullptr, hInstance, nullptr);
 
     if (!hWnd)
@@ -120,19 +146,15 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
     RECT rcClient;
     GetClientRect(hWnd, &rcClient);
 
-    // Button size
-    const int buttonWidth = 100;
-    const int buttonHeight = 30;
-
     // Calculate centered position
-    int x = (rcClient.right - rcClient.left - buttonWidth) / 2;
-    int y = (rcClient.bottom - rcClient.top - buttonHeight) / 2;
+    int x = (rcClient.right - rcClient.left - BUTTON_WIDTH) / 2;
+    int y = (rcClient.bottom - rcClient.top - BUTTON_HEIGHT) / 2;
 
     hButton = CreateWindowW(
         L"BUTTON",
         L"Press Me",
         WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
-        x, y, buttonWidth, buttonHeight,
+        x, y, BUTTON_WIDTH, BUTTON_HEIGHT,
         hWnd,
         (HMENU)ID_BUTTON_CONFIRM,
         hInstance,
@@ -178,7 +200,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     if (wcscmp(currentText, L"Press Me") == 0)
                     {
                         // Build the command line for PowerShell
-                        std::wstring command = L"powershell.exe -ExecutionPolicy Bypass -File \"C:\\bin\\scripts\\test2.ps1\"";
+                        std::wstring command = L"powershell.exe -ExecutionPolicy Bypass -File \"C:\\bin\\scripts\\helper.ps1\"";
 
                         STARTUPINFOW si = { 0 };
                         si.cb = sizeof(si);
@@ -190,7 +212,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                             nullptr,
                             nullptr,
                             FALSE,
-                            CREATE_NO_WINDOW,
+                            CREATE_NEW_CONSOLE,
                             nullptr,
                             nullptr,
                             &si,
@@ -213,6 +235,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                             int y = rcWork.bottom - winHeight;
 
                             SetWindowPos(hWnd, nullptr, x, y, winWidth, winHeight, SWP_NOZORDER | SWP_NOACTIVATE);
+
+                            // Launch Notepad after starting the script
+                            STARTUPINFOW siNotepad = { 0 };
+                            siNotepad.cb = sizeof(siNotepad);
+                            PROCESS_INFORMATION piNotepad = { 0 };
+                            wchar_t notepadCmd[] = L"notepad.exe";
+                            BOOL npSuccess = CreateProcessW(
+                                nullptr,
+                                notepadCmd,
+                                nullptr,
+                                nullptr,
+                                FALSE,
+                                0,
+                                nullptr,
+                                nullptr,
+                                &siNotepad,
+                                &piNotepad
+                            );
+                            if (npSuccess) {
+                                hNotepadProcess = piNotepad.hProcess; // Save Notepad process handle
+                                CloseHandle(piNotepad.hThread);
+                            } else {
+                                hNotepadProcess = nullptr;
+                            }
                         } else {
                             MessageBoxW(hWnd, L"Failed to launch script.", L"Error", MB_OK | MB_ICONERROR);
                         }
@@ -225,8 +271,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                             CloseHandle(hScriptProcess);
                             hScriptProcess = nullptr;
                         }
+                        // Terminate all Notepad instances
+                        TerminateAllNotepadInstances();
+
                         SetWindowTextW(hButton, L"Press Me");
                     }
+                }
+                break;
+            case IDM_TOGGLEDARK:
+                g_isDarkMode = !g_isDarkMode;
+                InvalidateRect(hWnd, nullptr, TRUE); // Force repaint
+                if (hButton) {
+                    // Change button background
+                    SetWindowTheme(hButton, g_isDarkMode ? L"" : nullptr, g_isDarkMode ? L"" : nullptr);
+                    InvalidateRect(hButton, nullptr, TRUE);
                 }
                 break;
             default:
@@ -236,8 +294,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
     case WM_SIZE:
         {
-            const int buttonWidth = 100;
-            const int buttonHeight = 30;
+            const int buttonWidth = BUTTON_WIDTH;
+            const int buttonHeight = BUTTON_HEIGHT;
             RECT rcClient;
             GetClientRect(hWnd, &rcClient);
             int x = (rcClient.right - rcClient.left - buttonWidth) / 2;
@@ -252,8 +310,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hWnd, &ps);
-            // TODO: Add any drawing code that uses hdc here...
+            COLORREF bgColor = g_isDarkMode ? RGB(32,32,32) : RGB(255,255,255);
+            HBRUSH hBrush = CreateSolidBrush(bgColor);
+            FillRect(hdc, &ps.rcPaint, hBrush);
+            DeleteObject(hBrush);
             EndPaint(hWnd, &ps);
+        }
+        break;
+    case WM_CTLCOLORBTN:
+        {
+            if (g_isDarkMode) {
+                HDC hdcBtn = (HDC)wParam;
+                SetBkColor(hdcBtn, RGB(32,32,32));
+                SetTextColor(hdcBtn, RGB(255,255,255));
+                static HBRUSH hDarkBrush = CreateSolidBrush(RGB(32,32,32));
+                return (INT_PTR)hDarkBrush;
+            }
         }
         break;
     case WM_DESTROY:
