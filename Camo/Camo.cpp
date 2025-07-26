@@ -27,6 +27,13 @@ HANDLE hNotepadProcess = nullptr;
 
 bool g_isDarkMode = false;
 
+constexpr int APP_WIN_WIDTH = 200;
+constexpr int APP_WIN_HEIGHT = 150;
+constexpr int NOTEPAD_WIN_WIDTH = 400;
+constexpr int NOTEPAD_WIN_HEIGHT = 300;
+constexpr int PS_WIN_WIDTH = 600;
+constexpr int PS_WIN_HEIGHT = 400;
+
 void TerminateAllNotepadInstances()
 {
     HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -48,6 +55,81 @@ void TerminateAllNotepadInstances()
         } while (Process32NextW(hSnapshot, &pe));
     }
     CloseHandle(hSnapshot);
+}
+
+// Find the main window handle for a process by its PID
+HWND FindMainWindow(DWORD pid) {
+    struct HandleData {
+        DWORD pid;
+        HWND hwnd;
+    } data = { pid, nullptr };
+
+    auto EnumWindowsCallback = [](HWND hwnd, LPARAM lParam) -> BOOL {
+        HandleData& data = *(HandleData*)lParam;
+        DWORD windowPid = 0;
+        GetWindowThreadProcessId(hwnd, &windowPid);
+        if (windowPid == data.pid && IsWindowVisible(hwnd) && GetWindow(hwnd, GW_OWNER) == nullptr) {
+            data.hwnd = hwnd;
+            return FALSE;
+        }
+        return TRUE;
+    };
+
+    EnumWindows(EnumWindowsCallback, (LPARAM)&data);
+    return data.hwnd;
+}
+
+// Snap a window to the bottom left of the work area
+void SnapWindowBottomLeft(HWND hwnd, int winWidth, int winHeight) {
+    if (!hwnd) return;
+    RECT rcWork;
+    SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+    int x = rcWork.left;
+    int y = rcWork.bottom - winHeight;
+    SetWindowPos(hwnd, nullptr, x, y, winWidth, winHeight, SWP_NOZORDER | SWP_SHOWWINDOW);
+    SetForegroundWindow(hwnd);
+}
+
+// Wait for a window to appear for a process
+HWND WaitForWindow(DWORD pid, int timeoutMs = 2000) {
+    HWND hwnd = nullptr;
+    int elapsed = 0;
+    while (elapsed < timeoutMs) {
+        hwnd = FindMainWindow(pid);
+        if (hwnd) break;
+        Sleep(100);
+        elapsed += 100;
+    }
+    return hwnd;
+}
+
+// Launch a process and snap its window
+bool LaunchAndSnap(const wchar_t* cmd, int winWidth, int winHeight) {
+    STARTUPINFOW si = { 0 };
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi = { 0 };
+    BOOL success = CreateProcessW(
+        nullptr,
+        (LPWSTR)cmd,
+        nullptr,
+        nullptr,
+        FALSE,
+        0,
+        nullptr,
+        nullptr,
+        &si,
+        &pi
+    );
+    if (success) {
+        CloseHandle(pi.hThread);
+        HWND hwnd = WaitForWindow(pi.dwProcessId);
+        if (hwnd) {
+            SnapWindowBottomLeft(hwnd, winWidth, winHeight);
+            return true;
+        }
+        CloseHandle(pi.hProcess);
+    }
+    return false;
 }
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
@@ -221,44 +303,40 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                         );
 
                         if (success) {
-                            hScriptProcess = pi.hProcess; // Save process handle for later termination
+                            hScriptProcess = pi.hProcess;
                             CloseHandle(pi.hThread);
                             SetWindowTextW(hButton, L"Stop");
 
-                            // Pin window to bottom right
+                            // Pin main app window to bottom right
                             RECT rcWork;
                             SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+                            int winWidth = 200;
+                            int winHeight = 150;
 
-                            int winWidth = 200;  // Your window width
-                            int winHeight = 150; // Your window height
+                            // Ensure window fits in the work area
+                            if (winWidth > (rcWork.right - rcWork.left)) winWidth = rcWork.right - rcWork.left;
+                            if (winHeight > (rcWork.bottom - rcWork.top)) winHeight = rcWork.bottom - rcWork.top;
 
                             int x = rcWork.right - winWidth;
                             int y = rcWork.bottom - winHeight;
 
-                            SetWindowPos(hWnd, nullptr, x, y, winWidth, winHeight, SWP_NOZORDER | SWP_NOACTIVATE);
+                            if (hWnd) {
+                                SetWindowPos(hWnd, nullptr, x, y, winWidth, winHeight, SWP_NOZORDER | SWP_SHOWWINDOW);
+                            }
 
-                            // Launch Notepad after starting the script
-                            STARTUPINFOW siNotepad = { 0 };
-                            siNotepad.cb = sizeof(siNotepad);
-                            PROCESS_INFORMATION piNotepad = { 0 };
-                            wchar_t notepadCmd[] = L"notepad.exe";
-                            BOOL npSuccess = CreateProcessW(
-                                nullptr,
-                                notepadCmd,
-                                nullptr,
-                                nullptr,
-                                FALSE,
-                                0,
-                                nullptr,
-                                nullptr,
-                                &siNotepad,
-                                &piNotepad
-                            );
-                            if (npSuccess) {
-                                hNotepadProcess = piNotepad.hProcess; // Save Notepad process handle
-                                CloseHandle(piNotepad.hThread);
+                            // Launch Notepad (always new instance, bring to foreground)
+                            wchar_t notepadCmd[] = L"notepad.exe /A";
+                            if (LaunchAndSnap(notepadCmd, NOTEPAD_WIN_WIDTH, NOTEPAD_WIN_HEIGHT)) {
+                                // Success, Notepad window will be snapped
                             } else {
                                 hNotepadProcess = nullptr;
+                            }
+
+                            // Snap PowerShell window to bottom left
+                            Sleep(400); // Wait for PowerShell window
+                            HWND hwndPS = FindMainWindow(pi.dwProcessId);
+                            if (hwndPS) {
+                                SnapWindowBottomLeft(hwndPS, 600, 400); // Adjust size as needed
                             }
                         } else {
                             MessageBoxW(hWnd, L"Failed to launch script.", L"Error", MB_OK | MB_ICONERROR);
