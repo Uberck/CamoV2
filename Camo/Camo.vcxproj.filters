@@ -32,6 +32,15 @@
     <ClCompile Include="Camo.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="CamoUI.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ProcessUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ThemeUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Camo.rc">
