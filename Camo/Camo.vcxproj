@@ -131,6 +131,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Camo.cpp" />
+    <ClCompile Include="CamoUI.cpp" />
+    <ClCompile Include="ProcessUtils.cpp" />
+    <ClCompile Include="ThemeUtils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Camo.rc" />
