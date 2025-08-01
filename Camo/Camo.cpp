@@ -1,12 +1,11 @@
 // Christos Kokkalis 2025
-// Camo.cpp : Defines the entry point for the application.
 //
 
 #include "framework.h"
 #include "Camo.h"
 #include <array>
 
-// Entry point for the Camo application.
+// Entry point for the app.
 // Initializes the main window and runs the message loop.
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
@@ -17,9 +16,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
-    std::array<WCHAR, MAX_LOADSTRING> szTitle;
-    // Load application title and window class name
-    LoadStringW(hInstance, IDS_APP_TITLE, szTitle.data(), MAX_LOADSTRING);
+    // Set the application window title
+    wcscpy_s(szTitle, MAX_LOADSTRING, L"Camo by Christos");
     LoadStringW(hInstance, IDC_CAMO, szWindowClass, MAX_LOADSTRING);
     MyRegisterClass(hInstance);
 
