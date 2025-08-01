@@ -66,7 +66,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
     // Create the main button control
     hButton = CreateWindowW(
-        L"BUTTON", L"Press Me",
+        L"BUTTON", L"Keep Alive!",
         WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
         x, y, BUTTON_WIDTH, BUTTON_HEIGHT,
         hWnd, (HMENU)ID_BUTTON_CONFIRM, hInstance, nullptr);
@@ -105,7 +105,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             GetWindowTextW(hButton, currentText, 32);
 
             std::wstring text(currentText);
-            if (text == L"Press Me")
+            if (text == L"Keep Alive!")
             {
                 if (hScriptProcess) {
                     MessageBoxW(hWnd, L"PowerShell script is already running.", L"Info", MB_OK | MB_ICONINFORMATION);
@@ -174,7 +174,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     hScriptProcess = nullptr;
                 }
                 TerminateAllNotepadInstances();
-                SetWindowTextW(hButton, L"Press Me");
+                SetWindowTextW(hButton, L"Keep Alive!");
             }
         }
         break;
