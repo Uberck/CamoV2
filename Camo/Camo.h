@@ -6,6 +6,7 @@
 #include <windows.h>
 #include "resource.h"
 #include <tlhelp32.h>
+#include <string>
 
 // Application constants
 #define MAX_LOADSTRING 100
@@ -41,5 +42,6 @@ bool LaunchAndSnap(const wchar_t* cmd, int winWidth, int winHeight);
 void SetDarkTitleBar(HWND hwnd, bool dark);
 void SetMenuDark(HWND hwnd);
 void SnapWindowBottomLeft(HWND hwnd, int winWidth, int winHeight);
+std::wstring ExtractScriptToTempFile();
 
 #pragma comment(lib, "uxtheme.lib")

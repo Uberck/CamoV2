@@ -13,6 +13,7 @@ HANDLE hScriptProcess = nullptr;               // Handle to the launched PowerSh
 HANDLE hNotepadProcess = nullptr;              // Handle to the launched Notepad process
 HINSTANCE hInst = nullptr;                     // Application instance handle
 bool g_isDarkMode = false;                     // Tracks dark mode state
+std::wstring g_scriptTempPath;
 
 // -----------------------------------------------------------------------------
 // MyRegisterClass
@@ -100,15 +101,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             break;
         case ID_BUTTON_CONFIRM:
         {
-            // Handle button press: either launch or stop script and Notepad
             wchar_t currentText[32];
             GetWindowTextW(hButton, currentText, 32);
 
             std::wstring text(currentText);
             if (text == L"Press Me")
             {
-                // Launch PowerShell script
-                std::wstring command = L"powershell.exe -ExecutionPolicy Bypass -File \"C:\\bin\\scripts\\helper.ps1\"";
+                if (hScriptProcess) {
+                    MessageBoxW(hWnd, L"PowerShell script is already running.", L"Info", MB_OK | MB_ICONINFORMATION);
+                    break;
+                }
+                TerminateAllNotepadInstances();
+                SetWindowTextW(hButton, L"Stop");
+                hScriptProcess = nullptr;
+                hNotepadProcess = nullptr;
+
+                // Extract embedded PowerShell script to temp file
+                g_scriptTempPath = ExtractScriptToTempFile();
+                if (g_scriptTempPath.empty()) {
+                    MessageBoxW(hWnd, L"Failed to extract PowerShell script.", L"Error", MB_OK | MB_ICONERROR);
+                    break;
+                }
+
+                // Build PowerShell command
+                std::wstring command = L"powershell.exe -ExecutionPolicy Bypass -File \"" + g_scriptTempPath + L"\"";
                 STARTUPINFOW si = { 0 };
                 si.cb = sizeof(si);
                 PROCESS_INFORMATION pi = { 0 };
@@ -144,9 +160,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     if (hwndPS) {
                         SnapWindowBottomLeft(hwndPS, 600, 400);
                     }
-                }
-                else {
-                    MessageBoxW(hWnd, L"Failed to launch script.", L"Error", MB_OK | MB_ICONERROR);
+                } else {
+                    MessageBoxW(hWnd, L"Failed to launch PowerShell.", L"Error", MB_OK | MB_ICONERROR);
                 }
             }
             else if (text == L"Stop")
@@ -220,7 +235,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     }
     break;
     case WM_DESTROY:
-        // Handle window destruction and exit the application
+        // Clean up the temporary PowerShell script file
+        if (!g_scriptTempPath.empty()) {
+            DeleteFileW(g_scriptTempPath.c_str());
+            g_scriptTempPath.clear();
+        }
         PostQuitMessage(0);
         break;
     default:

@@ -17,6 +17,7 @@
 #define IDC_STATIC				-1
 #endif
 #define IDM_TOGGLEDARK 4001
+#define IDR_PS_SCRIPT 2001
 // Next default values for new objects
 //
 #ifdef APSTUDIO_INVOKED

