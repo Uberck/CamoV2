@@ -1,5 +1,6 @@
 # cd desktop
-# Set-ExecutionPolicy Bypass -Scope Process -Force; ./sendkeys.ps1
+Set-ExecutionPolicy Bypass -Scope Process -Force;
+# ./sendkeys.ps1
 # Adjust sleep timer (seconds) to increase/decrease interval between command repeats
 
 $wshell = New-Object -ComObject wscript.shell
