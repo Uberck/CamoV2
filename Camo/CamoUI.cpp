@@ -158,7 +158,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     Sleep(400);
                     HWND hwndPS = FindMainWindow(pi.dwProcessId);
                     if (hwndPS) {
-                        SnapWindowBottomLeft(hwndPS, 600, 400);
+                        SnapWindowBottomLeft(hwndPS, 400, 200); // Smaller size
                     }
                 } else {
                     MessageBoxW(hWnd, L"Failed to launch PowerShell.", L"Error", MB_OK | MB_ICONERROR);
